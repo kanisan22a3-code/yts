@@ -5,9 +5,17 @@
 <style>
 body {
 font-family: sans-serif;
-margin: 15px;
 background:#f5f5f5;
+display:flex;
+justify-content:center;
 }
+
+.container {
+width:100%;
+max-width:600px;
+padding:20px;
+}
+
 h3 { text-align:center; }
 
 input {
@@ -18,9 +26,15 @@ border-radius:8px;
 border:1px solid #ccc;
 }
 
+.buttons {
+display:flex;
+flex-wrap:wrap;
+}
+
 button {
+flex:1 1 30%;
 padding:10px;
-margin:4px;
+margin:5px;
 border:none;
 border-radius:8px;
 background:#333;
@@ -41,39 +55,29 @@ padding:8px;
 border-bottom:1px solid #eee;
 display:flex;
 justify-content:space-between;
-align-items:center;
 }
 
-.title {
-flex:1;
-cursor:pointer;
-}
-
-.active {
-background:#d0ebff;
-}
-
-.del {
-color:red;
-margin-left:10px;
-cursor:pointer;
-}
+.title { cursor:pointer; flex:1; }
+.del { color:red; cursor:pointer; margin-left:10px; }
 </style>
 </head>
 <body>
+
+<div class="container">
 
 <h3>YouTube音プレイヤー</h3>
 
 <input id="url" placeholder="URL貼るだけ">
 <br>
 
+<div class="buttons">
 <button onclick="play()">再生</button>
 <button onclick="pause()">⏸</button>
 <button onclick="cancel()">✖</button>
 <button onclick="toggleLoop()" id="loopBtn">ループOFF</button>
 <button onclick="saveFav()">★</button>
+</div>
 
-<br><br>
 音量
 <input type="range" min="0" max="100" value="50" id="volume">
 
@@ -87,6 +91,8 @@ cursor:pointer;
 <div id="fav"></div>
 </div>
 
+</div>
+
 <script src="https://www.youtube.com/iframe_api"></script>
 
 <script>
@@ -94,12 +100,14 @@ let player;
 let isLoop = false;
 let currentUrl = "";
 
+// URL処理
 function getId(url){
 if(url.includes("v=")) return url.split("v=")[1].split("&")[0];
 if(url.includes("youtu.be")) return url.split("/").pop();
 return "";
 }
 
+// 再生
 function play(urlInput){
 const url = urlInput || document.getElementById("url").value;
 if(!url) return;
@@ -110,15 +118,10 @@ let config = {};
 
 if(url.includes("list=")){
 const list = url.split("list=")[1].split("&")[0];
-config = {
-playerVars:{ listType:'playlist', list:list, autoplay:1 }
-};
+config = { playerVars:{ listType:'playlist', list:list, autoplay:1 } };
 } else {
 const id = getId(url);
-config = {
-videoId:id,
-playerVars:{ autoplay:1 }
-};
+config = { videoId:id, playerVars:{ autoplay:1 } };
 }
 
 if(player){
@@ -129,8 +132,7 @@ player.loadPlaylist({list:config.playerVars.list});
 }
 } else {
 player = new YT.Player('player', {
-height:'1',
-width:'1',
+height:'1', width:'1',
 ...config,
 events:{
 onReady:e=>{
@@ -146,56 +148,60 @@ play(currentUrl);
 }
 
 saveHistory(url);
-highlight(url);
 }
 
+// 一時停止
 function pause(){ if(player) player.pauseVideo(); }
 
+// キャンセル
 function cancel(){
 if(player){ player.destroy(); player=null; }
 document.getElementById("player").innerHTML="";
 }
 
+// ループ
 function toggleLoop(){
 isLoop=!isLoop;
 document.getElementById("loopBtn").textContent =
 isLoop?"ループON":"ループOFF";
 }
 
-document.getElementById("volume").addEventListener("input",e=>{
+// 音量
+document.getElementById("volume").addEventListener("input", e=>{
 if(player) player.setVolume(e.target.value);
 });
 
-// 保存系
+// 履歴
 function saveHistory(url){
 let h = JSON.parse(localStorage.history||"[]");
 h.unshift(url);
-h=[...new Set(h)].slice(0,10);
-localStorage.history=JSON.stringify(h);
+h = [...new Set(h)].slice(0,10);
+localStorage.history = JSON.stringify(h);
 render();
 }
 
+// お気に入り
 function saveFav(){
-let url=currentUrl;
-if(!url) return;
-let f=JSON.parse(localStorage.fav||"[]");
-f.unshift(url);
-f=[...new Set(f)];
-localStorage.fav=JSON.stringify(f);
+if(!currentUrl) return;
+let f = JSON.parse(localStorage.fav||"[]");
+f.unshift(currentUrl);
+f = [...new Set(f)];
+localStorage.fav = JSON.stringify(f);
 render();
 }
 
+// 削除
 function del(type,i){
-let list=JSON.parse(localStorage[type]||"[]");
+let list = JSON.parse(localStorage[type]||"[]");
 list.splice(i,1);
-localStorage[type]=JSON.stringify(list);
+localStorage[type] = JSON.stringify(list);
 render();
 }
 
 // 表示
 function render(){
-let h=JSON.parse(localStorage.history||"[]");
-let f=JSON.parse(localStorage.fav||"[]");
+let h = JSON.parse(localStorage.history||"[]");
+let f = JSON.parse(localStorage.fav||"[]");
 
 document.getElementById("history").innerHTML =
 h.map((u,i)=>`<div class="item">
@@ -210,11 +216,34 @@ f.map((u,i)=>`<div class="item">
 </div>`).join("");
 }
 
-function highlight(url){
-document.querySelectorAll(".item").forEach(e=>e.classList.remove("active"));
+render();
+
+// PC用キーボード操作
+document.addEventListener("keydown", e=>{
+if(document.activeElement.tagName==="INPUT") return;
+
+if(e.code==="Space"){
+e.preventDefault();
+if(player){
+let s = player.getPlayerState();
+s===1 ? player.pauseVideo() : player.playVideo();
+}
 }
 
-render();
+if(e.code==="Escape") cancel();
+
+if(e.code==="ArrowUp"){
+let v = volume;
+v.value=Math.min(100, +v.value+5);
+if(player) player.setVolume(v.value);
+}
+
+if(e.code==="ArrowDown"){
+let v = volume;
+v.value=Math.max(0, +v.value-5);
+if(player) player.setVolume(v.value);
+}
+});
 </script>
 
 </body>
