@@ -70,6 +70,7 @@ let player;
 let currentUrl="";
 let isLoop=false;
 let seeking=false;
+let isReady=false;
 
 // URL→ID
 function getId(url){
@@ -100,7 +101,7 @@ return currentUrl;
 
 // 再生
 function play(urlInput){
-const url=urlInput||urlInput===0?urlInput:document.getElementById("url").value;
+const url=urlInput||document.getElementById("url").value;
 if(!url) return;
 
 document.getElementById("url").value=url;
@@ -113,7 +114,7 @@ const list=new URL(url).searchParams.get("list");
 config={playerVars:{listType:'playlist',list:list,autoplay:1}};
 }else{
 const id=getId(url);
-if(!id) return alert("URLが不正");
+if(!id) return alert("URL不正");
 config={videoId:id,playerVars:{autoplay:1}};
 }
 
@@ -126,6 +127,7 @@ height:"1",width:"1",
 ...config,
 events:{
 onReady:e=>{
+isReady=true;
 e.target.setVolume(volume.value);
 e.target.setPlaybackRate(speed.value);
 },
@@ -140,14 +142,15 @@ if(e.data===YT.PlayerState.ENDED && isLoop) play(currentUrl);
 
 // 操作
 function togglePause(){
-if(!player) return;
+if(!player || !isReady) return;
 player.getPlayerState()===1?player.pauseVideo():player.playVideo();
 }
-function next(){ player?.nextVideo(); }
-function prev(){ player?.previousVideo(); }
+function next(){ if(player && isReady) player.nextVideo(); }
+function prev(){ if(player && isReady) player.previousVideo(); }
 
 function cancel(){
 if(player){ player.destroy(); player=null; }
+isReady=false;
 document.getElementById("player").innerHTML="";
 document.getElementById("url").value="";
 currentUrl="";
@@ -159,15 +162,15 @@ loopBtn.textContent=isLoop?"ループON":"ループOFF";
 }
 
 // 音量・速度
-volume.oninput=e=>player?.setVolume(e.target.value);
-speed.onchange=e=>player?.setPlaybackRate(parseFloat(e.target.value));
+volume.oninput=e=>{ if(player && isReady) player.setVolume(e.target.value); };
+speed.onchange=e=>{ if(player && isReady) player.setPlaybackRate(parseFloat(e.target.value)); };
 
-// 🔥 高精度シーク
+// 🔥 高精度シーク（修正版）
 function updateSeek(){
-if(player && !seeking){
-const c=player.getCurrentTime();
+if(player && isReady && !seeking){
 const d=player.getDuration();
-if(d){
+const c=player.getCurrentTime();
+if(d>0){
 seek.max=d;
 seek.value=c;
 time.textContent=format(c)+" / "+format(d);
@@ -178,8 +181,9 @@ requestAnimationFrame(updateSeek);
 updateSeek();
 
 seek.oninput=()=>{
+if(!player || !isReady) return;
 seeking=true;
-player?.seekTo(parseFloat(seek.value),true);
+player.seekTo(parseFloat(seek.value),true);
 };
 seek.onchange=()=>{ seeking=false; };
 
@@ -188,15 +192,12 @@ s=Math.floor(s);
 return Math.floor(s/60)+":"+(s%60).toString().padStart(2,"0");
 }
 
-// 🔥 安定保存
+// 保存
 function saveHistory(url){
 if(!url) return;
 let h=JSON.parse(localStorage.getItem("history")||"[]");
-
 h.unshift({url:url,title:getTitle()||url});
-
 h=h.filter((v,i,a)=>a.findIndex(x=>x.url===v.url)===i).slice(0,10);
-
 localStorage.setItem("history",JSON.stringify(h));
 render();
 }
@@ -204,11 +205,8 @@ render();
 function saveFav(){
 if(!currentUrl) return;
 let f=JSON.parse(localStorage.getItem("fav")||"[]");
-
 f.unshift({url:currentUrl,title:getTitle()||currentUrl});
-
 f=f.filter((v,i,a)=>a.findIndex(x=>x.url===v.url)===i);
-
 localStorage.setItem("fav",JSON.stringify(f));
 render();
 }
