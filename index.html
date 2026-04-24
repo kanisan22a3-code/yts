@@ -9,38 +9,22 @@ background:#f5f5f5;
 display:flex;
 justify-content:center;
 }
-
 .container {
 width:100%;
 max-width:600px;
 padding:20px;
 }
-
-h3 { text-align:center; }
-
 input {
 width:100%;
 padding:12px;
 font-size:16px;
-border-radius:8px;
-border:1px solid #ccc;
 }
-
-.buttons {
-display:flex;
-flex-wrap:wrap;
-}
-
+.buttons { display:flex; flex-wrap:wrap; }
 button {
 flex:1 1 30%;
 padding:10px;
 margin:5px;
-border:none;
-border-radius:8px;
-background:#333;
-color:white;
 }
-
 #player { width:1px; height:1px; }
 
 .list {
@@ -51,14 +35,21 @@ padding:10px;
 }
 
 .item {
-padding:8px;
-border-bottom:1px solid #eee;
 display:flex;
-justify-content:space-between;
+align-items:center;
+border-bottom:1px solid #eee;
+padding:8px;
 }
 
-.title { cursor:pointer; flex:1; }
-.del { color:red; cursor:pointer; margin-left:10px; }
+.thumb {
+width:60px;
+height:45px;
+margin-right:10px;
+}
+
+.title { flex:1; cursor:pointer; }
+
+.del { color:red; margin-left:10px; cursor:pointer; }
 </style>
 </head>
 <body>
@@ -68,11 +59,10 @@ justify-content:space-between;
 <h3>YouTube音プレイヤー</h3>
 
 <input id="url" placeholder="URL貼るだけ">
-<br>
 
 <div class="buttons">
 <button onclick="play()">再生</button>
-<button onclick="pause()">⏸</button>
+<button onclick="togglePause()">⏸ / ▶</button>
 <button onclick="cancel()">✖</button>
 <button onclick="toggleLoop()" id="loopBtn">ループOFF</button>
 <button onclick="saveFav()">★</button>
@@ -97,14 +87,28 @@ justify-content:space-between;
 
 <script>
 let player;
-let isLoop = false;
-let currentUrl = "";
+let isLoop=false;
+let currentUrl="";
 
-// URL処理
+// ID取得
 function getId(url){
 if(url.includes("v=")) return url.split("v=")[1].split("&")[0];
 if(url.includes("youtu.be")) return url.split("/").pop();
 return "";
+}
+
+// サムネ
+function getThumb(url){
+const id = getId(url);
+return id ? `https://img.youtube.com/vi/${id}/default.jpg` : "";
+}
+
+// タイトル取得（プレイヤーから）
+function getTitle(){
+if(player && player.getVideoData){
+return player.getVideoData().title || currentUrl;
+}
+return currentUrl;
 }
 
 // 再生
@@ -112,33 +116,37 @@ function play(urlInput){
 const url = urlInput || document.getElementById("url").value;
 if(!url) return;
 
-currentUrl = url;
+document.getElementById("url").value=url;
+currentUrl=url;
 
-let config = {};
+let config={};
 
 if(url.includes("list=")){
-const list = url.split("list=")[1].split("&")[0];
-config = { playerVars:{ listType:'playlist', list:list, autoplay:1 } };
-} else {
-const id = getId(url);
-config = { videoId:id, playerVars:{ autoplay:1 } };
+const list=url.split("list=")[1].split("&")[0];
+config={playerVars:{listType:'playlist',list:list,autoplay:1}};
+}else{
+const id=getId(url);
+config={videoId:id,playerVars:{autoplay:1}};
 }
 
 if(player){
 if(config.videoId){
 player.loadVideoById(config.videoId);
-} else {
+}else{
 player.loadPlaylist({list:config.playerVars.list});
 }
-} else {
-player = new YT.Player('player', {
-height:'1', width:'1',
+}else{
+player=new YT.Player('player',{
+height:'1',width:'1',
 ...config,
 events:{
 onReady:e=>{
 e.target.setVolume(document.getElementById("volume").value);
 },
 onStateChange:e=>{
+if(e.data===YT.PlayerState.PLAYING){
+saveHistory(currentUrl); // タイトル取得後に保存
+}
 if(e.data===YT.PlayerState.ENDED && isLoop){
 play(currentUrl);
 }
@@ -146,104 +154,82 @@ play(currentUrl);
 }
 });
 }
-
-saveHistory(url);
 }
 
-// 一時停止
-function pause(){ if(player) player.pauseVideo(); }
+// 一時停止トグル
+function togglePause(){
+if(!player) return;
+let s=player.getPlayerState();
+s===1?player.pauseVideo():player.playVideo();
+}
 
 // キャンセル
 function cancel(){
 if(player){ player.destroy(); player=null; }
 document.getElementById("player").innerHTML="";
+document.getElementById("url").value="";
+currentUrl="";
 }
 
 // ループ
 function toggleLoop(){
 isLoop=!isLoop;
-document.getElementById("loopBtn").textContent =
+document.getElementById("loopBtn").textContent=
 isLoop?"ループON":"ループOFF";
 }
 
 // 音量
-document.getElementById("volume").addEventListener("input", e=>{
+volume.oninput=e=>{
 if(player) player.setVolume(e.target.value);
-});
+};
 
-// 履歴
+// 保存
 function saveHistory(url){
-let h = JSON.parse(localStorage.history||"[]");
-h.unshift(url);
-h = [...new Set(h)].slice(0,10);
-localStorage.history = JSON.stringify(h);
+let h=JSON.parse(localStorage.history||"[]");
+h.unshift({url:url,title:getTitle()});
+h=h.filter((v,i,a)=>a.findIndex(x=>x.url===v.url)===i).slice(0,10);
+localStorage.history=JSON.stringify(h);
 render();
 }
 
-// お気に入り
 function saveFav(){
 if(!currentUrl) return;
-let f = JSON.parse(localStorage.fav||"[]");
-f.unshift(currentUrl);
-f = [...new Set(f)];
-localStorage.fav = JSON.stringify(f);
+let f=JSON.parse(localStorage.fav||"[]");
+f.unshift({url:currentUrl,title:getTitle()});
+f=f.filter((v,i,a)=>a.findIndex(x=>x.url===v.url)===i);
+localStorage.fav=JSON.stringify(f);
 render();
 }
 
 // 削除
 function del(type,i){
-let list = JSON.parse(localStorage[type]||"[]");
+let list=JSON.parse(localStorage[type]||"[]");
 list.splice(i,1);
-localStorage[type] = JSON.stringify(list);
+localStorage[type]=JSON.stringify(list);
 render();
 }
 
 // 表示
 function render(){
-let h = JSON.parse(localStorage.history||"[]");
-let f = JSON.parse(localStorage.fav||"[]");
+let h=JSON.parse(localStorage.history||"[]");
+let f=JSON.parse(localStorage.fav||"[]");
 
-document.getElementById("history").innerHTML =
-h.map((u,i)=>`<div class="item">
-<span class="title" onclick="play('${u}')">${u}</span>
+history.innerHTML = h.map((v,i)=>`
+<div class="item">
+<img class="thumb" src="${getThumb(v.url)}">
+<span class="title" onclick="play('${v.url}')">${v.title}</span>
 <span class="del" onclick="del('history',${i})">削除</span>
 </div>`).join("");
 
-document.getElementById("fav").innerHTML =
-f.map((u,i)=>`<div class="item">
-<span class="title" onclick="play('${u}')">★ ${u}</span>
+fav.innerHTML = f.map((v,i)=>`
+<div class="item">
+<img class="thumb" src="${getThumb(v.url)}">
+<span class="title" onclick="play('${v.url}')">★ ${v.title}</span>
 <span class="del" onclick="del('fav',${i})">削除</span>
 </div>`).join("");
 }
 
 render();
-
-// PC用キーボード操作
-document.addEventListener("keydown", e=>{
-if(document.activeElement.tagName==="INPUT") return;
-
-if(e.code==="Space"){
-e.preventDefault();
-if(player){
-let s = player.getPlayerState();
-s===1 ? player.pauseVideo() : player.playVideo();
-}
-}
-
-if(e.code==="Escape") cancel();
-
-if(e.code==="ArrowUp"){
-let v = volume;
-v.value=Math.min(100, +v.value+5);
-if(player) player.setVolume(v.value);
-}
-
-if(e.code==="ArrowDown"){
-let v = volume;
-v.value=Math.max(0, +v.value-5);
-if(player) player.setVolume(v.value);
-}
-});
 </script>
 
 </body>
