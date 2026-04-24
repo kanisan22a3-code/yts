@@ -68,8 +68,27 @@ margin-right:10px;
 <button onclick="saveFav()">★</button>
 </div>
 
+<div class="buttons">
+<button onclick="prev()">⏮ 前</button>
+<button onclick="next()">⏭ 次</button>
+</div>
+
 音量
 <input type="range" min="0" max="100" value="50" id="volume">
+
+再生位置
+<input type="range" id="seek" min="0" max="100" value="0">
+<div id="time">0:00 / 0:00</div>
+
+再生速度
+<select id="speed">
+<option value="0.5">0.5x</option>
+<option value="0.75">0.75x</option>
+<option value="1" selected>1x</option>
+<option value="1.25">1.25x</option>
+<option value="1.5">1.5x</option>
+<option value="2">2x</option>
+</select>
 
 <div id="player"></div>
 
@@ -89,30 +108,17 @@ margin-right:10px;
 let player;
 let isLoop=false;
 let currentUrl="";
+let seeking=false;
 
-// 🔥 完全対応ID取得
+// ID取得
 function getId(url){
 try {
 const u = new URL(url);
-
-if(u.hostname.includes("youtu.be")){
-return u.pathname.replace("/", "");
-}
-
-if(u.searchParams.get("v")){
-return u.searchParams.get("v");
-}
-
-if(u.pathname.includes("/shorts/")){
-return u.pathname.split("/shorts/")[1];
-}
-
-if(u.pathname.includes("/live/")){
-return u.pathname.split("/live/")[1];
-}
-
+if(u.hostname.includes("youtu.be")) return u.pathname.replace("/", "");
+if(u.searchParams.get("v")) return u.searchParams.get("v");
+if(u.pathname.includes("/shorts/")) return u.pathname.split("/shorts/")[1];
+if(u.pathname.includes("/live/")) return u.pathname.split("/live/")[1];
 } catch(e){}
-
 return "";
 }
 
@@ -122,7 +128,7 @@ const id = getId(url);
 return id ? `https://img.youtube.com/vi/${id}/default.jpg` : "";
 }
 
-// タイトル安全取得
+// タイトル
 function getTitle(){
 try{
 if(player && player.getVideoData){
@@ -135,16 +141,16 @@ return currentUrl;
 
 // 再生
 function play(urlInput){
-const url = urlInput || document.getElementById("url").value;
+const url = urlInput || urlInput===0 ? urlInput : document.getElementById("url").value;
 if(!url) return;
 
-document.getElementById("url").value = url;
-currentUrl = url;
+document.getElementById("url").value=url;
+currentUrl=url;
 
 let config={};
 
 if(url.includes("list=")){
-const list = new URL(url).searchParams.get("list");
+const list=new URL(url).searchParams.get("list");
 config={playerVars:{listType:'playlist',list:list,autoplay:1}};
 }else{
 const id=getId(url);
@@ -164,7 +170,8 @@ height:'1',width:'1',
 ...config,
 events:{
 onReady:e=>{
-e.target.setVolume(document.getElementById("volume").value);
+e.target.setVolume(volume.value);
+e.target.setPlaybackRate(speed.value);
 },
 onStateChange:e=>{
 if(e.data===YT.PlayerState.PLAYING){
@@ -179,12 +186,16 @@ play(currentUrl);
 }
 }
 
-// 一時停止トグル
+// 一時停止
 function togglePause(){
 if(!player) return;
 let s=player.getPlayerState();
 s===1?player.pauseVideo():player.playVideo();
 }
+
+// 次・前
+function next(){ if(player) player.nextVideo(); }
+function prev(){ if(player) player.previousVideo(); }
 
 // キャンセル
 function cancel(){
@@ -197,79 +208,88 @@ currentUrl="";
 // ループ
 function toggleLoop(){
 isLoop=!isLoop;
-document.getElementById("loopBtn").textContent=
-isLoop?"ループON":"ループOFF";
+loopBtn.textContent=isLoop?"ループON":"ループOFF";
 }
 
 // 音量
-document.getElementById("volume").addEventListener("input", e=>{
+volume.oninput=e=>{
 if(player) player.setVolume(e.target.value);
-});
-
-// 履歴保存（安定版）
-function saveHistory(url){
-if(!url) return;
-
-let h = JSON.parse(localStorage.getItem("history") || "[]");
-
-const item = {
-url: url,
-title: getTitle() || url
 };
 
-h.unshift(item);
+// 再生速度
+speed.onchange=e=>{
+if(player) player.setPlaybackRate(parseFloat(e.target.value));
+};
 
-h = h.filter((v,i,a)=>a.findIndex(x=>x.url===v.url)===i).slice(0,10);
+// シークバー
+setInterval(()=>{
+if(player && player.getCurrentTime && !seeking){
+const current=player.getCurrentTime();
+const duration=player.getDuration();
+if(duration){
+seek.value=(current/duration)*100;
+time.textContent=formatTime(current)+" / "+formatTime(duration);
+}
+}
+},500);
 
-localStorage.setItem("history", JSON.stringify(h));
+seek.oninput=()=>{ seeking=true; };
+seek.onchange=()=>{
+if(player){
+const duration=player.getDuration();
+player.seekTo((seek.value/100)*duration,true);
+}
+seeking=false;
+};
+
+function formatTime(sec){
+sec=Math.floor(sec);
+const m=Math.floor(sec/60);
+const s=sec%60;
+return m+":"+(s<10?"0"+s:s);
+}
+
+// 保存
+function saveHistory(url){
+let h=JSON.parse(localStorage.getItem("history")||"[]");
+h.unshift({url:url,title:getTitle()});
+h=h.filter((v,i,a)=>a.findIndex(x=>x.url===v.url)===i).slice(0,10);
+localStorage.setItem("history",JSON.stringify(h));
 render();
 }
 
-// お気に入り保存
 function saveFav(){
 if(!currentUrl) return;
-
-let f = JSON.parse(localStorage.getItem("fav") || "[]");
-
-const item = {
-url: currentUrl,
-title: getTitle() || currentUrl
-};
-
-f.unshift(item);
-
-f = f.filter((v,i,a)=>a.findIndex(x=>x.url===v.url)===i);
-
-localStorage.setItem("fav", JSON.stringify(f));
+let f=JSON.parse(localStorage.getItem("fav")||"[]");
+f.unshift({url:currentUrl,title:getTitle()});
+f=f.filter((v,i,a)=>a.findIndex(x=>x.url===v.url)===i);
+localStorage.setItem("fav",JSON.stringify(f));
 render();
 }
 
-// 削除
 function del(type,i){
-let list = JSON.parse(localStorage.getItem(type) || "[]");
+let list=JSON.parse(localStorage.getItem(type)||"[]");
 list.splice(i,1);
-localStorage.setItem(type, JSON.stringify(list));
+localStorage.setItem(type,JSON.stringify(list));
 render();
 }
 
 // 表示
 function render(){
-let h = JSON.parse(localStorage.getItem("history") || "[]");
-let f = JSON.parse(localStorage.getItem("fav") || "[]");
+let h=JSON.parse(localStorage.getItem("history")||"[]");
+let f=JSON.parse(localStorage.getItem("fav")||"[]");
 
-document.getElementById("history").innerHTML =
-h.map((v,i)=>`
+history.innerHTML=h.map((v,i)=>`
 <div class="item">
 <img class="thumb" src="${getThumb(v.url)}">
-<span class="title" onclick="play('${v.url}')">${v.title || v.url}</span>
+<span class="title" onclick="play('${v.url}')">${v.title}</span>
 <span class="del" onclick="del('history',${i})">削除</span>
 </div>`).join("");
 
-document.getElementById("fav").innerHTML =
-f.map((v,i)=>`
+fav.innerHTML=f.map((v,i)=>`
 <div class="item">
 <img class="thumb" src="${getThumb(v.url)}">
-<span class="title" onclick="play('${v.url}')">★ ${v.title || v.url}</span>
+<span class="title" onclick="play('${v.url}')">★ ${v.title}</span>
 <span class="del" onclick="del('fav',${i})">削除</span>
 </div>`).join("");
 }
