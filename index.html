@@ -90,10 +90,29 @@ let player;
 let isLoop=false;
 let currentUrl="";
 
-// ID取得
+// 🔥 完全対応ID取得
 function getId(url){
-if(url.includes("v=")) return url.split("v=")[1].split("&")[0];
-if(url.includes("youtu.be")) return url.split("/").pop();
+try {
+const u = new URL(url);
+
+if(u.hostname.includes("youtu.be")){
+return u.pathname.replace("/", "");
+}
+
+if(u.searchParams.get("v")){
+return u.searchParams.get("v");
+}
+
+if(u.pathname.includes("/shorts/")){
+return u.pathname.split("/shorts/")[1];
+}
+
+if(u.pathname.includes("/live/")){
+return u.pathname.split("/live/")[1];
+}
+
+} catch(e){}
+
 return "";
 }
 
@@ -125,7 +144,7 @@ currentUrl = url;
 let config={};
 
 if(url.includes("list=")){
-const list=url.split("list=")[1].split("&")[0];
+const list = new URL(url).searchParams.get("list");
 config={playerVars:{listType:'playlist',list:list,autoplay:1}};
 }else{
 const id=getId(url);
@@ -187,14 +206,18 @@ document.getElementById("volume").addEventListener("input", e=>{
 if(player) player.setVolume(e.target.value);
 });
 
-// 履歴保存
+// 履歴保存（安定版）
 function saveHistory(url){
+if(!url) return;
+
 let h = JSON.parse(localStorage.getItem("history") || "[]");
 
-h.unshift({
+const item = {
 url: url,
-title: getTitle()
-});
+title: getTitle() || url
+};
+
+h.unshift(item);
 
 h = h.filter((v,i,a)=>a.findIndex(x=>x.url===v.url)===i).slice(0,10);
 
@@ -202,16 +225,18 @@ localStorage.setItem("history", JSON.stringify(h));
 render();
 }
 
-// お気に入り
+// お気に入り保存
 function saveFav(){
 if(!currentUrl) return;
 
 let f = JSON.parse(localStorage.getItem("fav") || "[]");
 
-f.unshift({
+const item = {
 url: currentUrl,
-title: getTitle()
-});
+title: getTitle() || currentUrl
+};
+
+f.unshift(item);
 
 f = f.filter((v,i,a)=>a.findIndex(x=>x.url===v.url)===i);
 
