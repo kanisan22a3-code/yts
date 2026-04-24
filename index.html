@@ -1,38 +1,135 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <title>MP3ループ再生</title>
-  <style>
-    body {
-      font-family: sans-serif;
-      text-align: center;
-      margin-top: 50px;
-    }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>YouTube音再生</title>
+
+<style>
+body { font-family:sans-serif; text-align:center; margin:20px; }
+input { width:100%; padding:10px; font-size:16px; }
+button { padding:10px; margin:5px; font-size:14px; }
+iframe { width:1px; height:1px; opacity:0; }
+.list { margin-top:20px; text-align:left; }
+.item { border-bottom:1px solid #ccc; padding:5px; font-size:14px; display:flex; justify-content:space-between; }
+.title { cursor:pointer; flex:1; }
+.del { color:red; cursor:pointer; margin-left:10px; }
+</style>
 </head>
 <body>
 
-  <h2>MP3を選択</h2>
+<h3>音だけ再生</h3>
 
-  <input type="file" id="fileInput" accept="audio/mp3,audio/mpeg">
-  <br><br>
+<input type="text" id="url" placeholder="YouTube URL">
+<br>
 
-  <audio id="player" controls loop></audio>
+<button onclick="play()">再生</button>
+<button onclick="toggleLoop()" id="loopBtn">ループOFF</button>
+<button onclick="saveFav()">★お気に入り</button>
 
-  <script>
-    const fileInput = document.getElementById("fileInput");
-    const player = document.getElementById("player");
+<div id="player"></div>
 
-    fileInput.addEventListener("change", () => {
-      const file = fileInput.files[0];
-      if (!file) return;
+<div class="list">
+<h4>履歴</h4>
+<div id="history"></div>
 
-      const url = URL.createObjectURL(file);
-      player.src = url;
-      player.play();
-    });
-  </script>
+<h4>お気に入り</h4>
+<div id="fav"></div>
+</div>
+
+<script>
+let isLoop = false;
+
+function toggleLoop() {
+isLoop = !isLoop;
+document.getElementById("loopBtn").textContent =
+isLoop ? "ループON" : "ループOFF";
+}
+
+function getVideoId(url) {
+if (url.includes("v=")) return url.split("v=")[1].split("&")[0];
+if (url.includes("youtu.be")) return url.split("/").pop();
+return "";
+}
+
+// タイトル取得（YouTubeのサムネから簡易）
+function getTitle(url) {
+const id = getVideoId(url);
+return id ? `https://img.youtube.com/vi/${id}/0.jpg` : url;
+}
+
+function play(urlInput) {
+const url = urlInput || document.getElementById("url").value;
+let embed = "";
+
+if (url.includes("list=")) {
+const listId = url.split("list=")[1].split("&")[0];
+embed = `https://www.youtube.com/embed/videoseries?list=${listId}&loop=${isLoop?1:0}&autoplay=1`;
+} else {
+const id = getVideoId(url);
+if (isLoop) {
+embed = `https://www.youtube.com/embed/${id}?loop=1&playlist=${id}&autoplay=1`;
+} else {
+embed = `https://www.youtube.com/embed/${id}?autoplay=1`;
+}
+}
+
+document.getElementById("player").innerHTML =
+`<iframe src="${embed}" allow="autoplay"></iframe>`;
+
+saveHistory(url);
+}
+
+function saveHistory(url) {
+let h = JSON.parse(localStorage.getItem("history") || "[]");
+h.unshift(url);
+h = [...new Set(h)].slice(0, 10);
+localStorage.setItem("history", JSON.stringify(h));
+renderHistory();
+}
+
+function saveFav() {
+const url = document.getElementById("url").value;
+let f = JSON.parse(localStorage.getItem("fav") || "[]");
+f.unshift(url);
+f = [...new Set(f)];
+localStorage.setItem("fav", JSON.stringify(f));
+renderFav();
+}
+
+function deleteItem(type, index) {
+let list = JSON.parse(localStorage.getItem(type) || "[]");
+list.splice(index, 1);
+localStorage.setItem(type, JSON.stringify(list));
+if (type === "history") renderHistory();
+else renderFav();
+}
+
+function renderHistory() {
+const h = JSON.parse(localStorage.getItem("history") || "[]");
+document.getElementById("history").innerHTML =
+h.map((u,i) =>
+`<div class="item">
+<span class="title" onclick="play('${u}')">${u}</span>
+<span class="del" onclick="deleteItem('history',${i})">削除</span>
+</div>`
+).join("");
+}
+
+function renderFav() {
+const f = JSON.parse(localStorage.getItem("fav") || "[]");
+document.getElementById("fav").innerHTML =
+f.map((u,i) =>
+`<div class="item">
+<span class="title" onclick="play('${u}')">★ ${u}</span>
+<span class="del" onclick="deleteItem('fav',${i})">削除</span>
+</div>`
+).join("");
+}
+
+renderHistory();
+renderFav();
+</script>
 
 </body>
 </html>
