@@ -2,59 +2,24 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>TAL風 図形問題</title>
+<title>TAL完全版（判定付き）</title>
 <style>
-body {
-  font-family: sans-serif;
-  background: #f5f5f5;
-  margin: 0;
+body{margin:0;font-family:sans-serif;background:#f3f4f6;}
+.header{display:flex;justify-content:space-between;padding:15px 20px;}
+.box{background:#fff;margin:20px;border-radius:12px;padding:20px;}
+.container{display:flex;}
+.left{
+  width:40%;
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:20px;
+  border-right:2px dashed #999;
 }
-.header {
-  display: flex;
-  justify-content: space-between;
-  padding: 15px 20px;
-}
-.box {
-  background: #fff;
-  border-radius: 10px;
-  margin: 20px;
-  padding: 20px;
-}
-.container {
-  display: flex;
-}
-.left {
-  width: 40%;
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 15px;
-}
-.shape {
-  width: 70px;
-  height: 70px;
-  border: 2px solid transparent;
-  cursor: pointer;
-}
-.selected {
-  border: 3px solid red;
-}
-.right {
-  width: 60%;
-}
-canvas {
-  background: #fff;
-}
-button {
-  padding: 12px 20px;
-  border-radius: 8px;
-  border: none;
-  margin: 10px;
-  cursor: pointer;
-}
-.primary {
-  background: #3b82f6;
-  color: white;
-}
+canvas.shape{width:80px;height:80px;cursor:pointer;}
+.selected{outline:4px solid red;}
+.right{width:60%;}
+button{padding:12px 30px;border-radius:10px;border:none;margin:10px;}
+.primary{background:#2563eb;color:white;}
 </style>
 </head>
 
@@ -62,130 +27,159 @@ button {
 
 <div class="header">
   <div>問題 1 / 10</div>
-  <div>残り時間 <span id="timer">90</span>s</div>
+  <div>残り時間 <span id="time">90</span>s</div>
 </div>
 
 <div class="box">
-  <p>左の図形の中から、右の図の線で囲まれた部分に入る図形をすべて選んでください。</p>
+<p>左の図形の中から、右の図の線で囲まれた部分に入る図形をすべて選んでください。</p>
 
-  <div class="container">
-    
-    <!-- 左：図形 -->
-    <div class="left" id="shapes"></div>
+<div class="container">
+<div class="left" id="left"></div>
+<div class="right">
+<canvas id="main" width="600" height="350"></canvas>
+</div>
+</div>
 
-    <!-- 右：図 -->
-    <div class="right">
-      <canvas id="canvas" width="500" height="300"></canvas>
-    </div>
-
-  </div>
-
-  <div style="text-align:center;">
-    <button onclick="reset()">リセット</button>
-    <button class="primary" onclick="submit()">決定する</button>
-  </div>
+<div style="text-align:center;">
+<button onclick="reset()">リセット</button>
+<button class="primary" onclick="submit()">決定する</button>
+</div>
 
 </div>
 
 <script>
-// ===== 図形データ =====
-const shapesData = [
-  {type:"circle", color:"orange"},
-  {type:"square", color:"blue"},
-  {type:"triangle", color:"red"},
-  {type:"circle", color:"yellow"},
-  {type:"square", color:"green"},
-  {type:"triangle", color:"blue"},
-  {type:"circle", color:"red"},
-  {type:"square", color:"orange"},
-  {type:"triangle", color:"green"},
+// ===== 図形（当たり判定用：ポリゴン）=====
+const shapes = [
+  // 四角
+  [{x:10,y:10},{x:70,y:10},{x:70,y:70},{x:10,y:70}],
+  // 三角
+  [{x:40,y:10},{x:10,y:70},{x:70,y:70}],
+  // 五角形
+  [{x:40,y:10},{x:70,y:30},{x:60,y:70},{x:20,y:70},{x:10,y:30}],
+  // 円（近似）
+  Array.from({length:20},(_,i)=>{
+    let a=i/20*Math.PI*2;
+    return {x:40+30*Math.cos(a),y:40+30*Math.sin(a)};
+  }),
 ];
 
-// 正解（例）
-const correct = [1, 4];
+// ===== 左描画 =====
+const left = document.getElementById("left");
 
-// ===== 左側描画 =====
-const container = document.getElementById("shapes");
+shapes.forEach((poly,i)=>{
+  const cv=document.createElement("canvas");
+  cv.width=80;cv.height=80;
+  cv.className="shape";
+  const ctx=cv.getContext("2d");
 
-shapesData.forEach((s, i)=>{
-  const el = document.createElement("canvas");
-  el.width = 70;
-  el.height = 70;
-  el.classList.add("shape");
+  ctx.beginPath();
+  poly.forEach((p,j)=>{
+    if(j===0) ctx.moveTo(p.x,p.y);
+    else ctx.lineTo(p.x,p.y);
+  });
+  ctx.closePath();
+  ctx.fillStyle=["blue","red","orange","gold"][i%4];
+  ctx.fill();
 
-  const ctx = el.getContext("2d");
-  ctx.fillStyle = s.color;
-
-  if(s.type==="circle"){
-    ctx.beginPath();
-    ctx.arc(35,35,25,0,Math.PI*2);
-    ctx.fill();
-  }
-  if(s.type==="square"){
-    ctx.fillRect(10,10,50,50);
-  }
-  if(s.type==="triangle"){
-    ctx.beginPath();
-    ctx.moveTo(35,10);
-    ctx.lineTo(10,60);
-    ctx.lineTo(60,60);
-    ctx.closePath();
-    ctx.fill();
-  }
-
-  el.onclick = ()=>{
-    el.classList.toggle("selected");
-  };
-
-  container.appendChild(el);
+  cv.onclick=()=>cv.classList.toggle("selected");
+  left.appendChild(cv);
 });
 
-// ===== 右側図 =====
-const canvas = document.getElementById("canvas");
-const ctx = canvas.getContext("2d");
+// ===== 右の枠（台形）=====
+const polygon = [
+  {x:260,y:120},
+  {x:420,y:120},
+  {x:480,y:250},
+  {x:200,y:250}
+];
 
-ctx.lineWidth = 3;
+// 描画
+const c=document.getElementById("main").getContext("2d");
+c.lineWidth=4;
+c.beginPath();
+c.moveTo(200,250);
+c.lineTo(260,120);
+c.lineTo(420,120);
+c.lineTo(480,250);
+c.closePath();
+c.stroke();
 
-// 図っぽい線
-ctx.beginPath();
-ctx.moveTo(100,200);
-ctx.lineTo(200,80);
-ctx.lineTo(350,80);
-ctx.lineTo(420,200);
-ctx.lineTo(100,200);
-ctx.stroke();
+// ===== 点が中か =====
+function inside(p, vs){
+  let x=p.x,y=p.y,inside=false;
+  for(let i=0,j=vs.length-1;i<vs.length;j=i++){
+    let xi=vs[i].x,yi=vs[i].y;
+    let xj=vs[j].x,yj=vs[j].y;
+    let intersect=((yi>y)!=(yj>y)) &&
+      (x<(xj-xi)*(y-yi)/(yj-yi)+xi);
+    if(intersect) inside=!inside;
+  }
+  return inside;
+}
 
-ctx.beginPath();
-ctx.moveTo(200,120);
-ctx.lineTo(350,120);
-ctx.stroke();
-
-ctx.beginPath();
-ctx.arc(250,50,30,0,Math.PI*1.5);
-ctx.stroke();
-
-// ===== タイマー =====
-let time = 90;
-setInterval(()=>{
-  time--;
-  document.getElementById("timer").textContent = time;
-},1000);
-
-// ===== ボタン処理 =====
-function reset(){
-  document.querySelectorAll(".shape").forEach(el=>{
-    el.classList.remove("selected");
+// ===== 回転 =====
+function rotate(poly, angle){
+  const cx=40, cy=40;
+  return poly.map(p=>{
+    const x=p.x-cx, y=p.y-cy;
+    return {
+      x: x*Math.cos(angle)-y*Math.sin(angle)+cx,
+      y: x*Math.sin(angle)+y*Math.cos(angle)+cy
+    };
   });
+}
+
+// ===== スケール =====
+function scale(poly, s){
+  return poly.map(p=>({
+    x:p.x*s,
+    y:p.y*s
+  }));
+}
+
+// ===== 平行移動 =====
+function translate(poly, dx, dy){
+  return poly.map(p=>({x:p.x+dx,y:p.y+dy}));
+}
+
+// ===== 判定（回転＋スケーリング総当たり）=====
+function fits(poly){
+  for(let s=1; s<4; s+=0.2){          // サイズ
+    for(let r=0; r<Math.PI*2; r+=Math.PI/8){ // 回転
+      let p = scale(poly, s);
+      p = rotate(p, r);
+      p = translate(p, 250, 150);
+
+      if(p.every(pt=>inside(pt, polygon))){
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+// ===== ボタン =====
+function reset(){
+  document.querySelectorAll(".shape").forEach(e=>e.classList.remove("selected"));
 }
 
 function submit(){
-  const selected = [];
+  const result=[];
   document.querySelectorAll(".shape").forEach((el,i)=>{
-    if(el.classList.contains("selected")) selected.push(i);
+    if(el.classList.contains("selected")){
+      if(fits(shapes[i])) result.push(i);
+    }
   });
 
-  alert("選択: " + selected.join(", "));
+  alert("入る図形: "+result.join(", "));
 }
+
+// ===== タイマー =====
+let t=90;
+setInterval(()=>{
+  t--;
+  document.getElementById("time").textContent=t;
+},1000);
 </script>
 
 </body>
